@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toy-Car Interceptor · How to build your protection</title>
+<style>
+  :root {
+    --ink:#1b2230; --muted:#5b6778; --paper:#ffffff; --tint:#f3f6fb; --edge:#d9e0ea;
+    --blue:#1f6fd6; --green:#1d9a5b; --red:#d33a3a; --purple:#7a4fd6;
+    --client:#0f9f7a; --server:#d97b0f; --mitm:#c93d8a;
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body { margin:0; background:#e9edf3; color:var(--ink);
+         font:15px/1.55 "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width:860px; margin:24px auto; padding:36px 44px 60px; background:var(--paper);
+         border-radius:10px; box-shadow:0 8px 30px rgba(20,30,50,.10); }
+  h1 { font-size:30px; line-height:1.15; margin:0 0 6px; color:var(--blue); }
+  .sub { color:var(--muted); font-size:15px; margin:0 0 22px; }
+  h2 { font-size:20px; margin:34px 0 10px; padding:6px 12px; border-radius:8px; color:#fff;
+       background:var(--blue); break-after:avoid; }
+  h2 .n { display:inline-block; min-width:26px; opacity:.8; }
+  h3 { font-size:16px; margin:22px 0 6px; color:var(--ink); break-after:avoid; }
+  p { margin:8px 0; }
+  ul, ol { margin:6px 0 10px; padding-left:24px; }
+  li { margin:4px 0; }
+  code, pre { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background:var(--tint); border:1px solid var(--edge); padding:0 5px; border-radius:4px;
+         font-size:.9em; color:#0b3d91; }
+  pre { background:#0f1524; color:#e8eefb; border-radius:8px; padding:12px 14px; font-size:13px;
+        line-height:1.5; overflow-x:auto; margin:8px 0 12px; break-inside:avoid; }
+  pre code { background:none; border:none; color:inherit; padding:0; font-size:inherit; }
+  pre .k { color:#8fd3ff; } pre .s { color:#ffd479; } pre .c { color:#8a97ad; font-style:italic; }
+  pre .add { background:rgba(29,154,91,.28); display:block; margin:0 -14px; padding:0 14px; }
+  table { width:100%; border-collapse:collapse; margin:10px 0 14px; font-size:14px; }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--edge); vertical-align:top; }
+  th { background:var(--tint); color:var(--muted); font-weight:600; }
+  tr { break-inside:avoid; }
+  .card { border:1px solid var(--edge); border-left:5px solid var(--blue); border-radius:8px;
+          padding:12px 16px 6px; margin:14px 0; background:#fff; break-inside:avoid; }
+  .card h3 { margin:0 0 6px; }
+  .card.client { border-left-color:var(--client); }
+  .card.server { border-left-color:var(--server); }
+  .card.both   { border-left-color:var(--purple); }
+  .where { font-size:13px; color:var(--muted); margin:0 0 8px; }
+  .where b { color:var(--ink); }
+  .tag { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.4px; padding:1px 8px;
+         border-radius:20px; color:#fff; vertical-align:middle; margin-left:6px; }
+  .tag.client { background:var(--client); } .tag.server { background:var(--server); }
+  .tag.both { background:var(--purple); } .tag.plain { background:var(--blue); }
+  .box { border-radius:8px; padding:10px 14px; margin:12px 0; background:var(--tint);
+         border:1px solid var(--edge); break-inside:avoid; }
+  .box.warn { background:#fff4f4; border-color:#f3c4c4; }
+  .box.tip  { background:#effaf4; border-color:#bfe6cf; }
+  .box b:first-child { display:block; margin-bottom:2px; }
+  .flow { margin:12px 0 16px; }
+  .step { display:grid; grid-template-columns:150px 1fr; gap:14px; align-items:start;
+          padding:8px 12px; border-left:3px solid var(--edge); break-inside:avoid; }
+  .step .who { font-weight:700; font-size:13px; }
+  .step.client { border-left-color:var(--client); } .step.client .who { color:var(--client); }
+  .step.server { border-left-color:var(--server); } .step.server .who { color:var(--server); }
+  .step.mitm   { border-left-color:var(--mitm); }   .step.mitm .who   { color:var(--mitm); }
+  .step .what { font-size:14px; }
+  .arrow { text-align:center; color:var(--muted); font-size:13px; padding:2px 0; }
+  .ok { color:var(--green); font-weight:700; } .fail { color:var(--red); font-weight:700; }
+  .foot { margin-top:34px; color:var(--muted); font-size:13px; border-top:1px solid var(--edge); padding-top:10px; }
+  @page { size:A4; margin:16mm 14mm; }
+  @media print {
+    body { background:#fff; }
+    main { max-width:none; margin:0; padding:0; box-shadow:none; border-radius:0; }
+    h2 { margin-top:26px; }
+    a { color:inherit; text-decoration:none; }
+    thead { display:table-header-group; }
+    /* code blocks print on light paper: less ink, still readable */
+    pre { background:#f3f6fb; color:var(--ink); border:1px solid #9aa6b5; }
+    pre .k { color:#0b3d91; } pre .s { color:#8a4b00; } pre .c { color:#5b6778; }
+    pre .add { background:rgba(29,154,91,.18); }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>How to build your protection</h1>
+<p class="sub">A guide to <code>student_solution.py</code>: what is in it, how a request travels
+through it, where each kind of change goes, and how to test it. It shows you <em>where</em>.
+<em>What</em> to build is up to you.</p>
+
+<div class="box tip">
+  <b>Before you start</b>
+  On the page, choose <b>6 · Student Solution</b> in the Scenario menu. Then open
+  <code>student_solution.py</code> in your editor. From now on every button press on the page runs
+  the code in that file.
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">1</span> The one file</h2>
+
+<p>Everything you write goes in <code>student_solution.py</code>. From top to bottom:</p>
+
+<table>
+  <thead><tr><th style="width:36%">Part</th><th>What it is for</th></tr></thead>
+  <tbody>
+  <tr><td>The comment at the top</td><td>The same guide as this page, in short, plus a <b>toolbox</b>: the Python functions already available in the file.</td></tr>
+  <tr><td><code>SHARED_SECRET</code></td><td>A value your client code and your car-server code both know. Change it.</td></tr>
+  <tr><td><code>PROPERTIES</code></td><td>The five badges on the page. Set the ones you believe your design provides.</td></tr>
+  <tr><td><code>USER_ACTIONS</code></td><td>Which actions the account may perform. One way to write the rule for <code>authorize</code>.</td></tr>
+  <tr><td><code>PASSWORDS</code></td><td>A place for whatever your car-server code needs to know about the password. Empty until you decide.</td></tr>
+  <tr><td><code>create_request(...)</code> <span class="tag client">client</span></td><td>Builds one request when you press a button.</td></tr>
+  <tr><td><code>verify_request(...)</code> <span class="tag server">car server</span></td><td>Looks at an arriving request and says yes or no.</td></tr>
+  <tr><td><code>authorize(...)</code> <span class="tag server">car server</span></td><td>Says whether this user may do this action.</td></tr>
+  <tr><td><code>maintenance_auth(...)</code> <span class="tag server">optional</span></td><td>The second door on the car. Write it only if you want to take that door over.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2><span class="n">2</span> How a button press travels</h2>
+
+<div class="flow">
+  <div class="step client"><div class="who">You press ▲</div><div class="what">The Client panel calls your <code>create_request</code>.</div></div>
+  <div class="arrow">▼</div>
+  <div class="step client"><div class="who">create_request</div><div class="what">Your code builds a request: a method (<code>POST</code>), a path (an address on the car), some headers (named values), and a body (text).</div></div>
+  <div class="arrow">▼</div>
+  <div class="step mitm"><div class="who">The network</div><div class="what">The Interceptor can read the request here, change it, delay it, drop it, or send it again later.</div></div>
+  <div class="arrow">▼</div>
+  <div class="step server"><div class="who">verify_request</div><div class="what">Your code looks at what arrived and returns <code>{"ok": True, ...}</code> or <code>{"ok": False, ...}</code>.</div></div>
+  <div class="arrow">▼</div>
+  <div class="step server"><div class="who">authorize</div><div class="what">Your code says whether that user may do that action.</div></div>
+  <div class="arrow">▼</div>
+  <div class="step server"><div class="who">The car</div><div class="what">Moves if both said yes. A refusal shows <span class="fail">rejected</span> in the logs; a crash in your code shows <span class="fail">error</span>.</div></div>
+</div>
+
+<div class="box tip">
+  <b>Two dictionaries that keep values between presses</b>
+  <code>client_state</code> is a dictionary (a set of named values) kept by the client.
+  <code>server_state</code> is a dictionary kept by the car server. Both start empty, and anything you
+  put in one is still there next time. They are two different dictionaries on two different sides:
+  the car server cannot see <code>client_state</code>.
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">3</span> Your working loop</h2>
+
+<ol>
+  <li><b>Save</b> <code>student_solution.py</code>.</li>
+  <li>On the page, press <b>Reset Scenario</b>. This loads your saved file, empties both dictionaries,
+      puts the car back in the middle, and clears the logs.</li>
+  <li>Press an arrow. Read the <b>Client request log</b> and the <b>Network log</b>. If your
+      <code>verify_request</code> said no, the reason you wrote appears there.</li>
+  <li>Press <b>Run security checks</b> in the Car server panel. Each check starts with its own fresh
+      copy of your saved file, so you can press it any time without Reset Scenario. Each line is one
+      kind of attack. <span class="fail">FAIL</span> means that attack still works.</li>
+</ol>
+
+<div class="box warn">
+  <b>If a red badge appears at the top of the page</b>
+  Your saved file could not be loaded, usually a Python mistake. The badge shows the error text.
+  Until you fix it, save, and press <b>Reset Scenario</b>, the page runs a built-in stand-in instead of
+  your code.
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">4</span> Reading a FAIL</h2>
+
+<p>Each check line names the attack and says what the attacker did. For example:</p>
+
+<div class="box">
+  <b>Replay <span class="fail">FAIL - attack succeeded</span></b>
+  Sends the same captured request again without changing it.
+</div>
+
+<p>The checks run on their own copy of the car, so they do not appear in the Network log. To see
+exactly what a check sent, run this in a terminal in the project folder:</p>
+
+<pre><code>python3 attack_tests.py --verbose</code></pre>
+
+<p>Then follow that request through your <code>create_request</code>, <code>verify_request</code> and
+<code>authorize</code>, and ask what the car server could have noticed. Change one thing, then run the
+loop in section 3 again. One check at a time.</p>
+
+<!-- ============================================================ -->
+<h2><span class="n">5</span> Where each kind of change goes</h2>
+
+<p>Each card shows the real code as it is now and where your change goes. The examples use made-up
+values like <code>X-Colour</code>, so they show the <em>place</em>, not the answer.</p>
+
+<div class="card client">
+  <h3>Add something to a request <span class="tag client">create_request</span></h3>
+  <p class="where">The headers dictionary. It already has one entry.</p>
+<pre><code>    headers = {
+        <span class="s">"X-User"</span>: user,
+<span class="add">        <span class="s">"X-Colour"</span>: <span class="s">"blue"</span>,        <span class="c"># your new header</span></span>
+    }</code></pre>
+  <p>A header is a name and a value. Choose any name; <code>Host</code>, <code>Content-Type</code> and
+  <code>Content-Length</code> are added for you. Whatever you put in arrives on the other side as
+  <b>text</b>, so a number comes back as <code>"123"</code>, not <code>123</code>. The Network log
+  shows your extra headers and the start of the body; tick <b>show full requests</b> to see everything
+  the Interceptor sees.</p>
+</div>
+
+<div class="card server">
+  <h3>Check something when a request arrives <span class="tag server">verify_request</span></h3>
+  <p class="where">Read a value, test it, refuse if it is wrong. Put your checks <b>before</b> the last line that accepts.</p>
+<pre><code>    user = wire.header(request, <span class="s">"X-User"</span>)
+    command = str(wire.json_body(request).get(<span class="s">"command"</span>, <span class="s">""</span>)).upper()
+
+    <span class="k">if not</span> command:
+        <span class="k">return</span> {<span class="s">"ok"</span>: False, <span class="s">"reason"</span>: <span class="s">"no command"</span>}
+
+<span class="add">    colour = wire.header(request, <span class="s">"X-Colour"</span>)    <span class="c"># your new check</span></span>
+<span class="add">    <span class="k">if</span> colour != <span class="s">"blue"</span>:</span>
+<span class="add">        <span class="k">return</span> {<span class="s">"ok"</span>: False, <span class="s">"reason"</span>: <span class="s">"wrong colour"</span>}</span>
+
+    <span class="k">return</span> {<span class="s">"ok"</span>: True, <span class="s">"user"</span>: user, <span class="s">"command"</span>: command}</code></pre>
+  <p>Write the reason so that it tells <em>you</em> which check said no. It appears in the Network log.</p>
+</div>
+
+<div class="card both">
+  <h3>Remember something between requests <span class="tag both">either side</span></h3>
+  <p class="where">Use <code>client_state</code> on the client, <code>server_state</code> on the car server.</p>
+<pre><code>    <span class="c"># count how many requests the car server has seen</span>
+    server_state[<span class="s">"seen"</span>] = server_state.get(<span class="s">"seen"</span>, 0) + 1</code></pre>
+  <p>Whatever you store is still there on the next request. <b>Reset Scenario</b> empties both dictionaries.</p>
+</div>
+
+<div class="card both">
+  <h3>Change the body <span class="tag both">both sides</span></h3>
+  <p class="where">The body is text. The client makes it; the car server reads it.</p>
+<pre><code>    body = json.dumps({<span class="s">"command"</span>: command})     <span class="c"># in create_request</span></code></pre>
+  <p>You may turn that text into any other text before sending it. Then, in <code>verify_request</code>,
+  turn it back before you read the command. If the body no longer contains a plain
+  <code>"command"</code> value, <code>wire.json_body(request)</code> cannot read it for you: take
+  <code>request["body"]</code>, undo your change, then <code>json.loads(...)</code> to get the
+  dictionary back.</p>
+</div>
+
+<div class="card both">
+  <h3>The password <span class="tag both">both sides</span></h3>
+  <p class="where">The page puts whatever was typed in the Password box into <code>client_state["password"]</code>.</p>
+  <p>How the client sends it, and how the car server checks it, is your decision. <code>PASSWORDS</code>
+  at the top of the file is a place for whatever the car server needs to keep. The built-in scenarios
+  keep theirs in <code>labusers.py</code>, which you can read.</p>
+</div>
+
+<div class="card server">
+  <h3>Decide who may do what <span class="tag server">authorize</span></h3>
+  <p class="where">Called only after <code>verify_request</code> said yes.</p>
+<pre><code><span class="k">def</span> authorize(user, action, server_state):
+    <span class="k">return</span> True                     <span class="c"># right now, everyone may do everything</span></code></pre>
+  <p><code>action</code> is <code>"move"</code> for the arrows and <code>"admin_reset"</code> for Workshop reset.
+  <code>USER_ACTIONS</code> at the top of the file is one way to write the rule.</p>
+</div>
+
+<div class="card server">
+  <h3>Take over the maintenance door <span class="tag server">optional</span></h3>
+  <p class="where">The bottom of the file has this as a comment. Copy it out, remove the <code>#</code> from each line, fill in the middle.</p>
+<pre><code><span class="k">def</span> maintenance_auth(request, server_state):
+    guess = str(wire.json_body(request).get(<span class="s">"code"</span>, <span class="s">""</span>))
+    ...
+    <span class="k">return</span> {<span class="s">"ok"</span>: True}    <span class="c"># or {"ok": False}</span></code></pre>
+  <p>If the function does not exist, the car server keeps handling that door itself.</p>
+</div>
+
+<div class="card">
+  <h3>Say what you built <span class="tag plain">PROPERTIES</span></h3>
+<pre><code>PROPERTIES = {
+    <span class="s">"Integrity"</span>: False,
+    ...
+}</code></pre>
+  <p>Set to <code>True</code> the ones you believe your design provides. This only colours the badges on the
+  page. The security checks decide for themselves.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">6</span> Mistakes people make</h2>
+
+<table>
+  <thead><tr><th style="width:44%">What happened</th><th>Why</th></tr></thead>
+  <tbody>
+  <tr><td>Saved the file, nothing changed on the page.</td><td>You did not press <b>Reset Scenario</b>. The page is still running the old file.</td></tr>
+  <tr><td>Every request is rejected and the reason is <code>no result</code>.</td><td><code>verify_request</code> returned nothing. It must return a dictionary with <code>"ok"</code> in it.</td></tr>
+  <tr><td>A check on a number in a header never matches.</td><td>Headers arrive as text. Compare with <code>str(n)</code>, or convert with <code>int(...)</code> first.</td></tr>
+  <tr><td>Honest presses are rejected too, not just attacks.</td><td><code>verify_request</code> checks for something <code>create_request</code> never sent. Both sides must agree.</td></tr>
+  <tr><td>A value you stored is missing.</td><td>You stored it in <code>client_state</code> and looked in <code>server_state</code>, or the other way round. Two dictionaries, two sides.</td></tr>
+  <tr><td>It worked until Reset Scenario.</td><td>Your design relies on something stored in a dictionary from before. Reset empties both. Decide what happens on a fresh start.</td></tr>
+  </tbody>
+</table>
+
+<p class="foot">Toy-Car HTTP Interceptor · student guide · edit only <code>student_solution.py</code>.</p>
+
+</main>
+</body>
+</html>
